@@ -1,12 +1,13 @@
-"""comfyui_client.py — ComfyUI REST API client for video generation.
+"""comfyui_client.py — ComfyUI REST API client for image & video generation.
 
 Connects to local ComfyUI at localhost:8188.
-Supports Kling / Minimax / Wan API nodes installed in the ComfyUI instance.
+Supports SDXL image generation (free, local) and Wan2.1 video (optional).
 """
-import json
+import asyncio
 import httpx
 
 COMFYUI_HOST = "http://127.0.0.1:8188"
+COMFYUI_OUTPUT = "/Users/an/ComfyUI/output"
 
 
 async def check_comfyui() -> bool:
@@ -31,61 +32,95 @@ async def get_available_nodes() -> list[str]:
         return []
 
 
-async def find_video_nodes() -> list[str]:
-    """Find video-related API nodes (Kling, Minimax, Wan, etc.)."""
-    nodes = await get_available_nodes()
-    video_keywords = ["kling", "minimax", "wan", "videonode", "texttovideo", "imagetovideo"]
-    return [n for n in nodes if any(k in n.lower() for k in video_keywords)]
+async def generate_sdxl_image(prompt: str, scene_num: int = 1,
+                               seed: int = 42, steps: int = 25) -> dict:
+    """Generate an image using local SDXL (free, no API key needed).
 
-
-async def generate_video(prompt: str, node_type: str = "KlingTextToVideoNode",
-                         duration: int = 5, negative_prompt: str = "") -> dict:
-    """Send a video generation prompt to ComfyUI via the specified API node.
-
-    This builds a minimal workflow that calls the video API node.
-    Each node type has different parameters — we use the most common ones.
-
-    Args:
-        prompt: The video description prompt
-        node_type: The ComfyUI node class to use (e.g., 'KlingTextToVideoNode')
-        duration: Target video duration in seconds
-        negative_prompt: What to avoid
-
-    Returns:
-        dict with status and prompt_id
+    Builds a full txt2img workflow: checkpoint → CLIP → latent → sample → decode → save.
     """
-    # Build minimal workflow for the video API node
-    # This is a generic template — specific nodes may need different params
+    negative = "blurry, low quality, ugly, distorted, bad anatomy, deformed, extra limbs"
     workflow = {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": "sd_xl_base_1.0_0.9vae.safetensors"}
+        },
+        "2": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": prompt, "clip": ["1", 1]}
+        },
         "3": {
-            "class_type": node_type,
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": negative, "clip": ["1", 1]}
+        },
+        "4": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {"width": 1024, "height": 576, "batch_size": 1}
+        },
+        "5": {
+            "class_type": "KSampler",
             "inputs": {
-                "prompt": prompt,
-                "negative_prompt": negative_prompt or None,
-                "duration": duration,
+                "seed": seed, "steps": steps, "cfg": 7.0,
+                "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+                "model": ["1", 0], "positive": ["2", 0],
+                "negative": ["3", 0], "latent_image": ["4", 0]
             }
+        },
+        "6": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["5", 0], "vae": ["1", 2]}
+        },
+        "7": {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": f"stardust_scene{scene_num}", "images": ["6", 0]}
         }
     }
 
-    payload = {"prompt": workflow}
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(
+                f"{COMFYUI_HOST}/api/prompt",
+                json={"prompt": workflow},
+            )
+            if r.status_code != 200:
+                return {"status": "error", "detail": r.text}
 
-    async with httpx.AsyncClient(timeout=300) as client:
-        r = await client.post(
-            f"{COMFYUI_HOST}/api/prompt",
-            json=payload,
-        )
-        if r.status_code == 200:
             result = r.json()
-            return {"status": "queued", "prompt_id": result.get("prompt_id")}
-        else:
-            return {"status": "error", "detail": r.text}
+            prompt_id = result.get("prompt_id", "")
+
+            # Wait for completion
+            for _ in range(60):
+                await asyncio.sleep(5)
+                hist_r = await client.get(f"{COMFYUI_HOST}/history")
+                if hist_r.status_code != 200:
+                    continue
+                history = hist_r.json()
+                if prompt_id not in history:
+                    continue
+                info = history[prompt_id]
+                if info.get("status", {}).get("completed"):
+                    # Find the output image
+                    for nid, outputs in info.get("outputs", {}).items():
+                        for img in outputs.get("images", []):
+                            fname = img.get("filename", "")
+                            return {
+                                "status": "success",
+                                "image": f"{COMFYUI_OUTPUT}/{fname}",
+                                "prompt_id": prompt_id,
+                            }
+                    return {"status": "success", "prompt_id": prompt_id}
+                # Check for errors
+                for msg in info.get("status", {}).get("messages", []):
+                    if msg[0] == "execution_error":
+                        return {"status": "error", "detail": msg[1].get("exception_message", "?")}
+            return {"status": "timeout", "prompt_id": prompt_id}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 
 async def simulate_generate(prompt: str) -> dict:
-    """Simulate video generation — returns a mock result for demo/testing.
-    Real generation would use generate_video() with the actual ComfyUI node."""
+    """Fallback when ComfyUI is not available."""
     return {
         "status": "simulated",
         "prompt": prompt,
-        "note": "Demo mode — wire to actual ComfyUI node for real generation"
+        "note": "ComfyUI not running — run with ComfyUI for actual image generation"
     }

@@ -26,7 +26,7 @@ from src.agents.stylist_a import create_stylist_a
 from src.agents.stylist_b import create_stylist_b
 from src.agents.producer import create_producer
 from src.agents.critic import create_critic
-from src.comfyui_client import check_comfyui, simulate_generate
+from src.comfyui_client import check_comfyui, generate_sdxl_image, simulate_generate
 
 
 def separator(title: str) -> None:
@@ -143,11 +143,14 @@ async def main():
         print(f"Best prompt: {best_prompt[:150]}...")
 
         if comfy_ok:
-            result = await simulate_generate(best_prompt)
-            print(f"🎥 Generated: {result['status']}")
+            result = await generate_sdxl_image(best_prompt, scene_num=final_prompts.index(fp) + 1)
+            if result["status"] == "success":
+                print(f"  🖼️ SDXL image saved: {result.get('image', '?')}")
+            else:
+                print(f"  ⚠️ SDXL generation: {result['status']} — {result.get('detail', '')}")
         else:
             result = await simulate_generate(best_prompt)
-            print(f"🎥 {result['note']}")
+            print(f"  🎥 {result['note']}")
 
     # ─── Step 5: Critic review ───
     separator("STEP 4: Critic Evaluation")
