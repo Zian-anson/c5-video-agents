@@ -24,6 +24,8 @@
 | DeepSeek Chat API | deepseek-chat | Stylist A, Director, Producer, Critic |
 | MiniMax M2.7 API | MiniMax-M2.7 | Stylist B (second provider for different model) |
 
+| 9 | 2026-05-06 | Refactored main.py — extracted helper functions, parallelized Stylist A/B with `asyncio.gather`, fixed cross-scene variable carryover, moved `import re` to top level, removed fragile `sys.path.insert` | `python3 -c "import py_compile; py_compile.compile('main.py', doraise=True)"` — ✅ Syntax OK |
+
 ### Manual Steps Required
 
 1. Setting up `.env` with API keys — cannot be automated (secrets)
