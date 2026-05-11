@@ -20,3 +20,9 @@ Thumbs.db
 # API keys
 **/config.yaml
 hermes_config_backup*.yaml
+output/
+src/patches/
+*.log
+generate_overnight.py
+run_scene3.py
+run_swordsman.py

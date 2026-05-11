@@ -1,112 +1,154 @@
-# 星尘视频工坊 · Stardust Video Studio
+# 🎬 AG2 Multi-Agent Video Studio
 
-> 5 个 AG2 Beta 智能体协作生成 AI 视频提示词，双模型对抗 + 3 轮互审循环。
+> 将一句话需求 → 多智能体协作 → 完整视频。6 个 AG2 Beta Agent 编排 + ai-video-pipeline 渲染出片。
 
-**赛道：** `multi-agent`
-**基座 / Fork 来源：** [Mesh Shield](https://github.com/roshaninfordham/meshshieldai) — 参考其 AG2 Beta adapter 和流水线架构
-**AG2 版本：** `ag2 ==0.12.2` (Beta · `autogen.beta`)
+**赛道：** `multi-agent` · `video-generation`
+**基座：** [AG2 Beta](https://github.com/ag2ai/ag2) (v0.12.2+)
+**渲染引擎：** [ai-video-pipeline](https://github.com/Zian-anson/hermes-agent/tree/main)（HTML+Chrome→ffmpeg） + [ppt-agent-skills](https://github.com/sunbigfly/ppt-agent-skills)（Puppeteer 渲染）
 
 ---
 
 ## 一句话定位
 
-**输入：** 一个视频创意描述（如"赛博朋克城市夜景"）
-**输出：** 3 个场景的 AI 视频生成提示词 + Critic 评分意见
+**输入：** 一个视频主题（如"AG2 多智能体介绍"）
+**输出：** 完整 .mp4 视频（有画面 + 配音 + 字幕 + BGM）
 
-**核心创新：** 让两个使用**不同大模型**的 Prompt Engineer 智能体（DeepSeek 电影感 vs MiniMax 极简风）互相审查、迭代 3 轮，由 Producer 智能体拍板，最后 Critic 评审质量。这模拟了真实视频制作中的"创意分歧 → 制片人决策"流程。
+多智能体协作生成内容 → ai-video-pipeline 渲染为视频 → Critic 审片循环迭代。
 
 ---
 
-## 5 分钟跑起来
+## 架构
+
+```
+用户输入 "做一段 3 分钟的产品介绍视频"
+         │
+         ▼
+┌─────────────────────────────────────┐
+│ 🎬 Director (DeepSeek)              │
+│     拆解需求，生成场景分解           │
+├─────────────────────────────────────┤
+│ ✍️ ScriptWriter (DeepSeek)          │
+│     写配音脚本 + 幻灯片大纲         │
+├─────────────────────────────────────┤
+│ 🎨 SlideDesigner (DeepSeek)         │
+│     脚本 → 有效 pipeline JSON       │
+├─────────────────────────────────────┤
+│ 🎙 TTSDirector (DeepSeek)           │
+│     选 voice/palette/字幕/帧率      │
+├─────────────────────────────────────┤
+│ 🎞 VideoProducer                    │
+│     调 ai-video-pipeline 生成视频   │
+│     (HTML+Puppeteer→截图→TTS→ffmpeg)│
+├─────────────────────────────────────┤
+│ 🔍 Critic (DeepSeek)                │
+│     PASS/REVISE/FAIL 裁决           │
+│     ↓ REVISE → 回到 ScriptWriter    │
+└─────────────────────────────────────┘
+```
+
+### 修订循环
+
+```
+原版 → Critic 评审 → REVISE → ScriptWriter 修订 → SlideDesigner 修订 → 新版
+     → Critic 再审 → REVISE → ... → 达最大轮次 or PASS → 交付
+```
+
+---
+
+## 快速开始
+
+### 环境要求
+
+- Python 3.10+（推荐 3.12）
+- Google Chrome（用于幻灯片截图）
+- Google Chrome 已安装
+- ffmpeg 8.1+（`brew install ffmpeg`）
+- ComfyUI + SDXL（可选，用于 AI 背景图）
+- Node.js（用于 ppt-agent-skills 的 Puppeteer 渲染）
+
+### 安装
 
 ```bash
-# 1. 克隆
+# 1. 克隆项目
 git clone https://github.com/Zian-anson/c5-video-agents.git
 cd c5-video-agents
 
-# 2. Python 环境（需要 Python 3.10+）
-python3 -m venv .venv && source .venv/bin/activate
+# 2. Python 环境
+python3.12 -m venv .venv312
+source .venv312/bin/activate
 pip install -r requirements.txt
-pip install git+https://github.com/ag2ai/ag2.git   # AG2 Beta (main 分支)
+pip install git+https://github.com/ag2ai/ag2.git
 
 # 3. 配置 API 密钥
-# 编辑 .env 填入以下内容：
+# 编辑 .env 填入：
 # DEEPSEEK_API_KEY=sk-xxx
-# DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+# SILICONFLOW_API_KEY=sk-xxx（用于 CosyVoice2 TTS）
 # MINIMAX_CN_API_KEY=sk-xxx
-# MINIMAX_CN_BASE_URL=https://api.minimaxi.com/v1
 
-# 4. 运行
-source .venv/bin/activate
-python3 main.py
+# 4. 安装 Pipette（用于 ppt-agent-skills 渲染）
+npm install puppeteer
 ```
 
-首次运行预期输出：
+### 运行
+
+```bash
+# 一键启动（激活 venv + 设置代理）
+./run_video_studio.sh --topic "你的视频主题"
+
+# 或手动
+source .venv312/bin/activate
+export SILICONFLOW_API_KEY=sk-xxx
+python3 -m src.orchestrator --topic "AG2 多智能体介绍"
 ```
-🎬 Multi-Agent Video Studio
-   A team of AI agents collaborating on video generation
 
-ComfyUI: ✅ Running / ⏹️ Not running (will simulate)
+### 输出
 
-🎥 What video do you want to create? > 一段15秒赛博朋克城市夜景预告片
-...
-✅ Created 3 scene prompts
-✅ 3 rounds of A↔B mutual review per scene
-✅ 3 video prompts ready for generation
+视频文件在 `output/` 目录下：
+```
+output/ag2_video_你的主题/ag2_video_你的主题.mp4          # 原版
+output/ag2_video_你的主题_rev1/ag2_video_你的主题_rev1.mp4  # 修订版 1
+output/ag2_video_你的主题_rev2/ag2_video_你的主题_rev2.mp4  # 修订版 2（最终版）
 ```
 
 ---
 
 ## 多智能体架构
 
-```
-用户输入
-    │
-    ▼
-┌──────────────────────────────────────────────────────┐
-│ 🎬 导演 (Director)                                    │
-│  DeepSeek · 拆解需求为 2-3 个场景                       │
-└──────────────────────┬───────────────────────────────┘
-                       ▼
-    对每个场景执行 3 轮对抗审查：
-     ┌──────────────────────┐
-     │  Round 1: A写 → B写  │
-     │  → Producer评估+反馈  │
-     ├──────────────────────┤
-     │  Round 2: A修改→B修改 │
-     │  → Producer再评估     │
-     ├──────────────────────┤
-     │  Round 3: 终版       │
-     │  → Producer宣布胜者   │
-     └──────────┬───────────┘
-                ▼
-┌──────────────────────────────────────────────────────┐
-│ 🎥 ComfyUI (localhost:8188)                           │
-│   Kling / Minimax / Wan API 视频生成                  │
-└──────────────────────┬───────────────────────────────┘
-                       ▼
-┌──────────────────────────────────────────────────────┐
-│ 🔍 评审 (Critic)                                      │
-│   DeepSeek · 打分0-10 · PASS/REVISE/FAIL              │
-└──────────────────────────────────────────────────────┘
-```
-
 | 智能体 | 角色 | 模型 | 工具 |
 |--------|------|------|------|
-| 🎬 导演 Director | 拆解视频需求为场景 | DeepSeek | — |
-| 🎨 风格师A Stylist A | 电影感/戏剧化提示词 | **DeepSeek** | — |
-| 🎨 风格师B Stylist B | 极简/现代提示词 | **MiniMax M2.7** | — |
-| 💼 制片人 Producer | 评估双方、给反馈、选胜者 | DeepSeek | — |
-| 🔍 评审 Critic | 终审质量、打分 | DeepSeek | — |
-| 🎥 ComfyUI | 视频生成引擎 | — | REST API |
+| 🎬 Director | 场景分解、创意策划 | DeepSeek | — |
+| ✍️ ScriptWriter | 配音脚本、幻灯片大纲 | DeepSeek | — |
+| 🎨 SlideDesigner | 脚本→有效 pipeline JSON | DeepSeek | — |
+| 🎙 TTSDirector | TTS voice + 视觉参数选择 | DeepSeek | — |
+| 🎞 VideoProducer | 调用渲染管线出片 | — | subprocess + pipeline_adapter |
+| 🔍 Critic | 视频质量评审、修订裁决 | DeepSeek | — |
+
+### 版本演进
+
+| # | 日期 | 变更 | 验证 |
+|---|------|------|------|
+| 1 | 2026-05-05 | 基础 AG2 环境 + 5 agent（Director/StylistA/StylistB/Producer/Critic） | 完成 3 场景 3 轮互审 |
+| 2 | 2026-05-06 | 代码重构：提取 helper 函数、并行化 Stylist A/B | Syntax OK |
+| 3 | 2026-05-10 | **v2 重构**：改为 6 agent 全编排管线（ScriptWriter/SlideDesigner/TTSDirector/VideoProducer/CriticV2） | 完整出片 45-75s |
+| 4 | 2026-05-10 | 集成 ppt-agent-skills 渲染（Puppeteer, 1280×720, 五层景深设计） | 55-103 色/页 |
+| 5 | 2026-05-10 | 字幕改进：黑色描边 + Heiti SC 简体字体 | 中文标点正确 |
+| 6 | 2026-05-10 | TTS 升级：Edge-TTS → SiliconFlow CosyVoice2 | 墙内直连稳定 |
+| 7 | 2026-05-10 | 集成 BGM 环境音 | ffmpeg 合成 |
 
 ---
 
-## 现场演示
+## 技术栈
 
-- **Demo:** 本地运行 `python3 main.py`
-- **视频:** [待录制] 60-90 秒 demo
-- **缩略图:** [待添加]
+| 组件 | 技术 |
+|------|------|
+| 多智能体框架 | AG2 Beta (`autogen.beta`) |
+| LLM | DeepSeek Chat API |
+| TTS | SiliconFlow CosyVoice2（主） / macOS say（降级） |
+| 幻灯片渲染 | Puppeteer (Chromium) 1280×720 |
+| 视频合成 | ffmpeg + OpenCV |
+| 字幕 | Pillow 逐帧渲染 + 黑色描边 |
+| CSS 设计系统 | ppt-agent-skills 暗黑科技主题 |
+| AI 背景图 | ComfyUI + SDXL（可选） |
 
 ---
 
@@ -114,67 +156,49 @@ ComfyUI: ✅ Running / ⏹️ Not running (will simulate)
 
 ```
 c5-video-agents/
-├── README.md                    # 本文件
-├── AI_LOG.md                    # AI 迭代记录（8轮）✅
-├── ATTRIBUTION.md               # 拿来主义声明 ✅
-├── LICENSE                      # MIT ✅
-├── .env                         # API 密钥（不上传）
-├── .gitignore                   # ✅
-├── requirements.txt             # ✅
-├── main.py                      # 🎬 主入口
+├── README.md
+├── AI_LOG.md
+├── LICENSE
+├── .env                         # API 密钥
+├── requirements.txt
+├── run_video_studio.sh          # 一键入口
 ├── src/
-│   ├── config.py                # 双模型配置
-│   ├── comfyui_client.py        # ComfyUI REST 客户端
+│   ├── orchestrator.py          # 🎬 主编排循环
+│   ├── pipeline_adapter.py      # 🔗 ai-video-pipeline 桥接
+│   ├── config.py                # ⚙️ 双模型配置
+│   ├── comfyui_client.py        # 🎨 ComfyUI REST 客户端
 │   └── agents/
-│       ├── director.py          # 导演智能体
-│       ├── stylist_a.py         # 电影感风格师 (DeepSeek)
-│       ├── stylist_b.py         # 极简风风格师 (MiniMax)
-│       ├── producer.py          # 制片人智能体
-│       └── critic.py            # 评审智能体
-└── test_*.py                    # 3 个连通性测试
-```
-
----
-
-## 技术栈
-
-- **AG2 Beta** (`autogen.beta`) — 多智能体框架
-- **Python 3.10+** (3.12 推荐)
-- **DeepSeek API** — Stylist A / Director / Producer / Critic
-- **MiniMax API** — Stylist B（不同模型保证观点多样性）
-- **ComfyUI** — 视频生成引擎（localhost:8188, 可选）
-
----
-
-## 测试
-
-```bash
-# 环境连通性
-python3 test_ag2_beta.py      # DeepSeek + AG2 Beta
-python3 test_minimax.py       # MiniMax + AG2 Beta
-python3 test_multiagent.py    # 双模型 agent-as-tool
-
-# 完整流水线
-python3 main.py
+│       ├── director.py          # 🎬 导演 Agent
+│       ├── script_writer.py     # ✍️ 编剧 Agent
+│       ├── slide_designer.py    # 🎨 幻灯片设计 Agent
+│       ├── tts_director.py      # 🎙 TTS 导演 Agent
+│       ├── producer.py          # 💼 制片人 Agent（v1 兼容）
+│       ├── stylist_a.py         # 🎨 风格师 A（v1 兼容）
+│       ├── stylist_b.py         # 🎨 风格师 B（v1 兼容）
+│       ├── critic.py            # 🔍 评审 Agent（v1 兼容）
+│       └── critic_v2.py         # 🔍 增强评审 Agent
+└── output/                      # 视频输出
 ```
 
 ---
 
 ## 常见问题
 
-- **`ModuleNotFoundError: No module named 'autogen.beta'`** — 需要从 GitHub main 分支安装：`pip install git+https://github.com/ag2ai/ag2.git`（Python ≥ 3.10）
-- **MiniMax 输出包含 `<think>` 标签** — 这是正常现象，代码会自动剥离。不影响最终输出
-- **没有 ComfyUI** — 流水线仍可运行（simulate 模式），会展示完整的多智能体协作流程但跳过实际视频生成
-- **API 密钥错误** — 检查 `.env` 中的 `DEEPSEEK_API_KEY` 和 `MINIMAX_CN_API_KEY`
+**Q: TTS 失败怎么办？**
+A: 会自动降级到 macOS `say` 命令（离线、无网络依赖）。
+建议配置 `SILICONFLOW_API_KEY` 使用 CosyVoice2。
+
+**Q: ComfyUI 必须开吗？**
+A: 不需要。SDXL 背景是可选项，默认使用 CSS 设计系统。
+
+**Q: 字幕乱码/标点位置不对？**
+A: 确保 `compose.py` 中 `ImageFont.truetype` 使用 `index=1`（Heiti SC 简体）。
+
+**Q: 幻灯片纯黑？**
+A: Chrome headless 截图需要 `--default-background-color=0B1120` 参数。
 
 ---
 
 ## License
 
 MIT License. 见 `LICENSE`。
-
-## 致谢
-
-- AG2 团队 (Qingyun Wu, Vasiliy Radostev)
-- Mesh Shield 项目 (roshaninfordham/meshshieldai) — AG2 Beta 架构参考
-- Elite20 C5-AG2 挑战框架
