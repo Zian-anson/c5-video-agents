@@ -118,7 +118,9 @@ async def generate_sdxl_image(prompt: str, scene_num: int = 1,
 
 
 async def generate_wan_video(prompt: str, scene_num: int = 1,
-                             seed: int = 42, steps: int = 10) -> dict:
+                             seed: int = 42, steps: int = 10,
+                             width: int = 832, height: int = 480,
+                             video_length: int = 33) -> dict:
     """Generate a video using local Wan2.1 text-to-video.
 
     Official template workflow:
@@ -158,9 +160,9 @@ async def generate_wan_video(prompt: str, scene_num: int = 1,
         "6": {
             "class_type": "EmptyHunyuanLatentVideo",
             "inputs": {
-                "width": 832,
-                "height": 480,
-                "length": 33,
+                "width": width,
+                "height": height,
+                "length": video_length,
                 "batch_size": 1,
             }
         },
