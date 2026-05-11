@@ -103,12 +103,20 @@ python3 -m src.orchestrator --topic "AG2 多智能体介绍"
 
 ### 输出
 
-视频文件在 `output/` 目录下：
+输出视频文件在 `output/` 目录下，最终版本在 `demos/`：
+
 ```
 output/ag2_video_你的主题/ag2_video_你的主题.mp4          # 原版
 output/ag2_video_你的主题_rev1/ag2_video_你的主题_rev1.mp4  # 修订版 1
 output/ag2_video_你的主题_rev2/ag2_video_你的主题_rev2.mp4  # 修订版 2（最终版）
 ```
+
+### 演示视频
+
+| 视频 | 说明 | 技术栈 |
+|------|------|--------|
+| `demos/ag2_video_AG2_多智能体框架_rev2.mp4` | AG2 框架介绍（最终版） | ppt-agent-skills + CosyVoice2 + 3 轮修订 |
+| `demos/ag2_video_C5_AG2_多智能体视频创作_rev1.mp4` | C5 AG2 hackathon 演示 | v1 架构 + Stylist A/B 对抗 |
 
 ---
 
